@@ -32,25 +32,30 @@ REM  STEP 2 - Database name
 REM ---------------------------------------------------------------
 echo.
 set /p "DB_NAME=Nama Database baru: "
-if "%DB_NAME%"=="" (
+if not defined DB_NAME (
+    echo ERROR: Nama database tidak boleh kosong.
+    pause
+    exit /b 1
+)
+if "!DB_NAME!"=="" (
     echo ERROR: Nama database tidak boleh kosong.
     pause
     exit /b 1
 )
 
 echo.
-echo Membuat database [%DB_NAME%] bila belum ada...
-if "%DB_PASS%"=="" (
-    "%MYSQL_BIN%" -u %DB_USER% -e "CREATE DATABASE IF NOT EXISTS `%DB_NAME%` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+echo Membuat database [!DB_NAME!] bila belum ada...
+if "!DB_PASS!"=="" (
+    "%MYSQL_BIN%" -u !DB_USER! -e "CREATE DATABASE IF NOT EXISTS `!DB_NAME!` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 ) else (
-    "%MYSQL_BIN%" -u %DB_USER% -p%DB_PASS% -e "CREATE DATABASE IF NOT EXISTS `%DB_NAME%` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    "%MYSQL_BIN%" -u !DB_USER! -p!DB_PASS! -e "CREATE DATABASE IF NOT EXISTS `!DB_NAME!` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 )
 if !ERRORLEVEL! NEQ 0 (
     echo ERROR: Gagal membuat database. Cek user ^& password.
     pause
     exit /b 1
 )
-echo Database [%DB_NAME%] siap.
+echo Database [!DB_NAME!] siap.
 
 REM ---------------------------------------------------------------
 REM  STEP 3 - SQL file path
@@ -62,12 +67,18 @@ echo   Boleh juga file .gz (hasil backup otomatis / cron)
 echo.
 set /p "SQL_INPUT=Path file SQL: "
 
-set "SQL_INPUT=%SQL_INPUT:"=%"
+if not defined SQL_INPUT (
+    echo ERROR: Path file tidak boleh kosong.
+    pause
+    exit /b 1
+)
 
-if not exist "%SQL_INPUT%" (
+set "SQL_INPUT=!SQL_INPUT:"=!"
+
+if not exist "!SQL_INPUT!" (
     echo.
     echo ERROR: Path tidak ditemukan!
-    echo   %SQL_INPUT%
+    echo   !SQL_INPUT!
     pause
     exit /b 1
 )
@@ -77,15 +88,15 @@ REM  STEP 4 - Normalisasi input: folder / gz / sql
 REM ---------------------------------------------------------------
 set "SQL_FILE="
 
-if exist "%SQL_INPUT%\" (
+if exist "!SQL_INPUT!\" (
     echo.
     echo Terdeteksi FOLDER, mencari file .sql di dalamnya...
-    for /f "delims=" %%F in ('dir /b /a-d /o-d "%SQL_INPUT%\*.sql" 2^>nul') do (
-        if not defined SQL_FILE set "SQL_FILE=%SQL_INPUT%\%%F"
+    for /f "delims=" %%F in ('dir /b /a-d /o-d "!SQL_INPUT!\*.sql" 2^>nul') do (
+        if not defined SQL_FILE set "SQL_FILE=!SQL_INPUT!\%%F"
     )
     if not defined SQL_FILE (
-        for /f "delims=" %%F in ('dir /b /a-d /o-d "%SQL_INPUT%\*.gz" 2^>nul') do (
-            if not defined SQL_FILE set "SQL_FILE=%SQL_INPUT%\%%F"
+        for /f "delims=" %%F in ('dir /b /a-d /o-d "!SQL_INPUT!\*.gz" 2^>nul') do (
+            if not defined SQL_FILE set "SQL_FILE=!SQL_INPUT!\%%F"
         )
     )
     if not defined SQL_FILE (
@@ -97,19 +108,19 @@ if exist "%SQL_INPUT%\" (
     goto :normalized
 )
 
-echo "%SQL_INPUT%" | findstr /i /e ".gz" >nul
+echo "!SQL_INPUT!" | findstr /i /e ".gz" >nul
 if !ERRORLEVEL! EQU 0 (
     echo.
     echo Terdeteksi file GZIP, mengekstrak...
-    if not exist "%TMPDIR%" mkdir "%TMPDIR%"
-    tar -xzf "%SQL_INPUT%" -C "%TMPDIR%"
+    if not exist "!TMPDIR!" mkdir "!TMPDIR!"
+    tar -xzf "!SQL_INPUT!" -C "!TMPDIR!"
     if !ERRORLEVEL! NEQ 0 (
         echo ERROR: Gagal mengekstrak GZIP. Gunakan 7-Zip atau Git Bash.
         pause
         exit /b 1
     )
-    for /f "delims=" %%F in ('dir /b /a-d /o-d "%TMPDIR%\*.sql" 2^>nul') do (
-        if not defined SQL_FILE set "SQL_FILE=%TMPDIR%\%%F"
+    for /f "delims=" %%F in ('dir /b /a-d /o-d "!TMPDIR!\*.sql" 2^>nul') do (
+        if not defined SQL_FILE set "SQL_FILE=!TMPDIR!\%%F"
     )
     if not defined SQL_FILE (
         echo ERROR: Hasil ekstraksi tidak berisi file .sql
@@ -120,7 +131,7 @@ if !ERRORLEVEL! EQU 0 (
     goto :normalized
 )
 
-set "SQL_FILE=%SQL_INPUT%"
+set "SQL_FILE=!SQL_INPUT!"
 
 :normalized
 
@@ -129,39 +140,39 @@ REM  STEP 5 - Sanitize SQL (BOM / CRLF / TAB)
 REM ---------------------------------------------------------------
 echo.
 echo Membersihkan file SQL (BOM / CRLF / TAB)...
-if not exist "%TMPDIR%" mkdir "%TMPDIR%"
-set "CLEAN_FILE=%TMPDIR%\clean.sql"
+if not exist "!TMPDIR!" mkdir "!TMPDIR!"
+set "CLEAN_FILE=!TMPDIR!\clean.sql"
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$in='%SQL_FILE%'; $out='%CLEAN_FILE%'; $sw=New-Object System.IO.StreamWriter($out,$false,(New-Object System.Text.UTF8Encoding($false))); $sr=New-Object System.IO.StreamReader($in,(New-Object System.Text.UTF8Encoding($false)),$true); while(($l=$sr.ReadLine()) -ne $null){ $sw.Write($l.Replace([char]9,' ')); $sw.Write([char]10) }; $sr.Close(); $sw.Close(); Write-Host '  OK - file dibersihkan'"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$in='!SQL_FILE!'; $out='!CLEAN_FILE!'; $sw=New-Object System.IO.StreamWriter($out,$false,(New-Object System.Text.UTF8Encoding($false))); $sr=New-Object System.IO.StreamReader($in,(New-Object System.Text.UTF8Encoding($false)),$true); while(($l=$sr.ReadLine()) -ne $null){ $sw.Write($l.Replace([char]9,' ')); $sw.Write([char]10) }; $sr.Close(); $sw.Close(); Write-Host '  OK - file dibersihkan'"
 
-if not exist "%CLEAN_FILE%" (
+if not exist "!CLEAN_FILE!" (
     echo ERROR: Gagal membersihkan file SQL.
     pause
     exit /b 1
 )
-for %%A in ("%CLEAN_FILE%") do echo   Ukuran bersih: %%~zA bytes
+for %%A in ("!CLEAN_FILE!") do echo   Ukuran bersih: %%~zA bytes
 
 REM ---------------------------------------------------------------
 REM  STEP 6 - Verify SQL integrity
 REM ---------------------------------------------------------------
 echo.
 echo Memverifikasi file SQL...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=Get-Content -LiteralPath '%CLEAN_FILE%' -TotalCount 5000; $c=($t | Select-String -SimpleMatch 'CREATE TABLE').Count; $i=($t | Select-String -SimpleMatch 'INSERT INTO').Count; Write-Host ('  CREATE TABLE: '+$c); Write-Host ('  INSERT INTO : '+$i); if($c -eq 0){ Write-Host '  PERINGATAN: Tidak ada CREATE TABLE di 5000 baris pertama!' }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=Get-Content -LiteralPath '!CLEAN_FILE!' -TotalCount 5000; $c=($t | Select-String -SimpleMatch 'CREATE TABLE').Count; $i=($t | Select-String -SimpleMatch 'INSERT INTO').Count; Write-Host ('  CREATE TABLE: '+$c); Write-Host ('  INSERT INTO : '+$i); if($c -eq 0){ Write-Host '  PERINGATAN: Tidak ada CREATE TABLE di 5000 baris pertama!' }"
 
 REM ---------------------------------------------------------------
 REM  STEP 7 - Import  (TANPA --force supaya error terlihat)
 REM ---------------------------------------------------------------
 echo.
 echo ========================================
-echo Mengimpor ke [%DB_NAME%]...
+echo Mengimpor ke [!DB_NAME!]...
 echo Mohon tunggu (file besar bisa beberapa menit).
 echo ========================================
 echo.
 
-if "%DB_PASS%"=="" (
-    "%MYSQL_BIN%" -u %DB_USER% --default-character-set=utf8mb4 "%DB_NAME%" < "%CLEAN_FILE%"
+if "!DB_PASS!"=="" (
+    "%MYSQL_BIN%" -u !DB_USER! --default-character-set=utf8mb4 !DB_NAME! < "!CLEAN_FILE!"
 ) else (
-    "%MYSQL_BIN%" -u %DB_USER% -p%DB_PASS% --default-character-set=utf8mb4 "%DB_NAME%" < "%CLEAN_FILE%"
+    "%MYSQL_BIN%" -u !DB_USER! -p!DB_PASS! --default-character-set=utf8mb4 !DB_NAME! < "!CLEAN_FILE!"
 )
 
 set "RC=!ERRORLEVEL!"
@@ -170,16 +181,16 @@ if !RC! EQU 0 (
     echo ========================================
     echo SUCCESS! Database dibuat dan diimport.
     echo ========================================
-    echo Database : %DB_NAME%
-    echo Selesai  : %DATE% %TIME%
+    echo Database : !DB_NAME!
+    echo Selesai  : !DATE! !TIME!
     echo.
     echo Memverifikasi jumlah tabel...
-    if "%DB_PASS%"=="" (
-        "%MYSQL_BIN%" -u %DB_USER% -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='%DB_NAME%';"
+    if "!DB_PASS!"=="" (
+        "%MYSQL_BIN%" -u !DB_USER! -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='!DB_NAME!';"
     ) else (
-        "%MYSQL_BIN%" -u %DB_USER% -p%DB_PASS% -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='%DB_NAME%';"
+        "%MYSQL_BIN%" -u !DB_USER! -p!DB_PASS! -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='!DB_NAME!';"
     )
-    echo ^(angka di atas = jumlah tabel di database %DB_NAME%^)
+    echo ^(angka di atas = jumlah tabel di database !DB_NAME!^)
 ) else (
     echo ========================================
     echo ERROR! Import gagal (exit code !RC!)
@@ -195,8 +206,11 @@ if !RC! EQU 0 (
     echo     ^(mis. utf8mb4_0900_ai_ci, kolom generated, tipe JSON^)
 )
 
-if exist "%TMPDIR%" rd /s /q "%TMPDIR%" 2>nul
+if exist "!TMPDIR!" rd /s /q "!TMPDIR!" 2>nul
 
 echo.
-pause
+echo ========================================
+echo Tekan sembarang tombol untuk keluar...
+echo ========================================
+pause >nul
 endlocal
